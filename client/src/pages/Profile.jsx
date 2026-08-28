@@ -1,11 +1,200 @@
 import { useSelector } from "react-redux"
+import {useRef,useState, useEffect} from 'react'
+// import {getDownloadURL, getStorage,ref, uploadBytesResumable} from 'firebase/storage'
+// import { app } from "../firebase";
 
 export default function Profile() {
+  const { currentUser } = useSelector((state) => state.user);
+  const fileRef = useRef(null);
+  const [file,setFile] = useState(undefined);
+  const [filePerc, setFilePerc] = useState(0);
+  const [fileUploadError, setFileUploadError] = useState(false);
+  const [formData, setFormData] = useState({});
+  console.log(file);
+
+  useEffect(() => {
+    if(file){
+      handleFileUpload(file);
+    }
+  }, [file]);
+
+  // FIREBASE OLD CODE ::
+
+  // const handleFileUpload = async (file) => {
+  //   const storage = getStorage(app);
+  //   const fileName = new Date().getTime() + file.name;
+  //   const storageRef = ref(storage, fileName);
+  //   const uploadTask = uploadBytesResumable(storageRef, file);
+
+  //   uploadTask.on(
+  //     "state_changed",
+  //     (snapshot) => {
+  //       const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+  //       setFilePerc(Math.round(progress));
+  //     },
+  //     (error) => {
+  //       setFileUploadError(true);
+  //     },
+  //     ()=>{
+  //       getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+  //         setFormData(({ ...formData, avatar: downloadURL }));
+  //       });
+  //     }
+  //   );
+  // };
+
+  // CLOUDINARY NEW CODE ::
+  // const handleFileUpload = async (file) => {
+  //   try {
+  //     setFileUploadError(false);
+  //     setFilePerc(0);
+
+  //     const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  //     const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+  //     const cloudinaryFormData = new FormData();
+  //     cloudinaryFormData.append('file', file);
+  //     cloudinaryFormData.append('upload_preset', uploadPreset);
+  //     cloudinaryFormData.append('folder', 'real-estate/avatars');
+
+  //     const response = await fetch(
+  //       `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+  //       {
+  //         method: 'POST',
+  //         body: cloudinaryFormData,
+  //       }
+  //     );
+
+  //     const data = await response.json();
+
+  //     if (!response.ok) {
+  //       throw new Error(data.error?.message || 'Image upload failed');
+  //     }
+
+  //     setFilePerc(100);
+
+  //     setFormData((previousData) => ({
+  //       ...previousData,
+  //       avatar: data.secure_url,
+  //     }));
+  //   } catch (error) {
+  //     console.error('Cloudinary upload failed:', error);
+  //     setFileUploadError(true);
+  //   }
+  // };
+
+
+
+  //CLOUDINARY NEW CODE WITH PROGRESS BAR ::
+  
+  // Mimics Firebase's uploadBytesResumable
+    const uploadToCloudinary = (file) => {
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', uploadPreset);
+    formData.append('folder', 'real-estate/avatars'); // Optional folder organization
+
+    const uploadTask = {
+      snapshot: {
+        bytesTransferred: 0,
+        totalBytes: file.size,
+        ref: { downloadURL: null }, // Mocking the Firebase ref
+      },
+      on: (eventName, onProgress, onError, onComplete) => {
+        // Handle Progress
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            uploadTask.snapshot.bytesTransferred = e.loaded;
+            uploadTask.snapshot.totalBytes = e.total;
+            onProgress(uploadTask.snapshot);
+          }
+        };
+
+        // Handle Success
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText);
+            uploadTask.snapshot.ref.downloadURL = data.secure_url;
+            onComplete();
+          } else {
+            onError(new Error("Upload failed"));
+          }
+        };
+
+        // Handle Error
+        xhr.onerror = () => onError(new Error("Network error"));
+        
+        // Start upload
+        xhr.send(formData); 
+      },
+    };
+
+    return uploadTask;
+  };
+
+  // Mimics Firebase's getDownloadURL
+  const getCloudinaryDownloadURL = (ref) => {
+    return Promise.resolve(ref.downloadURL);
+  };
+
+  //SIMILAR TO FIREBASE FUNCTIONS
+  const handleFileUpload = async (file) => {
+    // 1. Call our Cloudinary wrapper instead of Firebase's ref/uploadBytesResumable
+    const uploadTask = uploadToCloudinary(file);
+
+    // 2. This structure is now identical to Firebase!
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        
+        // This will show the progress in your browser console!
+        console.log(`Upload is ${Math.round(progress)}% done`); 
+        
+        setFilePerc(Math.round(progress));
+      },
+      (error) => {
+        console.error("Upload error:", error);
+        setFileUploadError(true);
+      },
+      () => {
+        // 3. Call our mocked getDownloadURL
+        getCloudinaryDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+          
+          console.log("File available at:", downloadURL); // Shows the final URL in console
+          
+          setFormData((prevData) => ({ ...prevData, avatar: downloadURL }));
+        });
+      }
+    );
+  };
+
+
   return (
     <div className='p-3 max-w-lg mx-auto'>
       <h1 className='text-3xl font-semibold text-center my-7'>Profile</h1>
       <form className='flex flex-col gap-4'>
-        <img src={currentUser.avatar} alt="profile" className='rounded-full h-24 w-24 object-cover cursor-pointer self-center mt-2'/>
+        <input onChange={(e) => setFile(e.target.files[0])} type="file" ref={fileRef} className='hidden' accept="image/*"/>
+
+        <img onClick={() => fileRef.current?.click()} src={formData.avatar || currentUser.avatar} alt="profile" className='rounded-full h-24 w-24 object-cover cursor-pointer self-center mt-2'/>
+        <p className='text-sm self-center'>
+          {fileUploadError ?
+          (<span className='text-red-700'>Error Image upload</span>) :
+          filePerc > 0 && filePerc < 100 ?(
+            <span className='text-slate-700'>{`Uploading ${filePerc}%`}</span>)
+            :
+            filePerc === 100 ?(
+              <span className='text-green-700'>Image Successfully Uploaded</span>) :
+              ""
+          }
+        </p>
+
         <input type="text" placeholder='username' id='username' className='border p-3 rounded-lg' />
         <input type="text" placeholder='email' id='email' className='border p-3 rounded-lg' />
         <input type="text" placeholder='password' id='password' className='border p-3 rounded-lg' />
