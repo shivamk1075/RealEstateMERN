@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {useSelector} from 'react-redux';
 import {useNavigate, useParams } from 'react-router-dom';
 
-export default function Createlisting() {
+export default function UpdateListing() {
     const {currentUser} = useSelector((state) => state.user);
     const navigate = useNavigate();
     const params = useParams();

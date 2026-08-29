@@ -3,7 +3,7 @@ import { useState } from 'react'
 import {useSelector} from 'react-redux';
 import {useNavigate} from 'react-router-dom';
 
-export default function Createlisting() {
+export default function CreateListing() {
     const {currentUser} = useSelector((state) => state.user);
     const navigate = useNavigate();
     const [files, setFiles] = useState([]);
